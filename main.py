@@ -66,29 +66,53 @@ class Code:
 	def get_recents(self):
 
 		# Current
-		if self.global_state_db.exists():
-			logger.debug('getting recents from global state database')
+		for global_state_db in self.get_global_state_databases():
+			logger.debug('getting recents from global state database %s', global_state_db)
 			try:
-				return self.get_recents_global_state()
+				return self.get_recents_global_state(global_state_db)
 			except Exception as e:
-				logger.error('getting recents from global state database failed', e)
-				if not self.storage_json.exists():
-					raise e
+				logger.debug('getting recents from global state database %s failed: %s',
+				             global_state_db, e)
 
 		# Legacy
 		if self.storage_json.exists():
 			logger.debug('getting recents from storage.json (legacy)')
-			return self.get_recents_legacy()
+			try:
+				return self.get_recents_legacy()
+			except Exception as e:
+				logger.warning('getting recents from storage.json failed: %s', e)
 
-	def get_recents_global_state(self):
-		logger.debug('connecting to global state database %s', self.global_state_db)
-		con = sqlite3.connect(self.global_state_db)
-		cur = con.cursor()
-		cur.execute(
-			'SELECT value FROM ItemTable WHERE key = "history.recentlyOpenedPathsList"')
-		json_code, = cur.fetchone()
+		return []
+
+	def get_global_state_databases(self):
+		if not self.global_state_db:
+			return []
+
+		dbs = [self.global_state_db]
+		backup_db = pathlib.Path(str(self.global_state_db) + '.backup')
+		if backup_db.exists():
+			dbs.append(backup_db)
+
+		return [db for db in dbs if db.exists()]
+
+	def get_recents_global_state(self, global_state_db=None):
+		global_state_db = global_state_db or self.global_state_db
+		logger.debug('connecting to global state database %s', global_state_db)
+		con = sqlite3.connect(global_state_db)
+		try:
+			cur = con.cursor()
+			cur.execute(
+				'SELECT value FROM ItemTable WHERE key = "history.recentlyOpenedPathsList"')
+			row = cur.fetchone()
+		finally:
+			con.close()
+
+		if row is None:
+			raise KeyError('history.recentlyOpenedPathsList')
+
+		json_code, = row
 		paths_list = json.loads(json_code)
-		entries = paths_list['entries']
+		entries = paths_list.get('entries', [])
 		logger.debug('found %d entries in global state database', len(entries))
 		return self.parse_entry_paths(entries)
 
@@ -98,7 +122,8 @@ class Code:
 		:uri https://code.visualstudio.com/updates/v1_64
 		"""
 		logger.debug('loading storage.json')
-		storage = json.load(self.storage_json.open("r"))
+		with self.storage_json.open("r") as storage_file:
+			storage = json.load(storage_file)
 		entries = storage["openedPathsList"]["entries"]
 		logger.debug('found %d entries in storage.json', len(entries))
 		return self.parse_entry_paths(entries)
