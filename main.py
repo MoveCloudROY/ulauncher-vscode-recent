@@ -39,6 +39,7 @@ class Code:
 	def __init__(self):
 		self.installed_path = None
 		self.config_path = None
+		self.shared_state_db = None
 		self.global_state_db = None
 		self.storage_json = None
 
@@ -54,6 +55,7 @@ class Code:
 					             installed_path, config_path)
 					self.installed_path = installed_path
 					self.config_path = config_path
+					self.shared_state_db = self.get_shared_state_db(variant)
 					self.global_state_db = config_path / 'User' / 'globalStorage' / 'state.vscdb'
 					self.storage_json = config_path / 'User' / 'globalStorage' / 'storage.json'
 					return
@@ -85,15 +87,30 @@ class Code:
 		return []
 
 	def get_global_state_databases(self):
-		if not self.global_state_db:
-			return []
+		dbs = []
+		shared_state_db = getattr(self, "shared_state_db", None)
+		if shared_state_db:
+			dbs.append(shared_state_db)
 
-		dbs = [self.global_state_db]
-		backup_db = pathlib.Path(str(self.global_state_db) + '.backup')
-		if backup_db.exists():
-			dbs.append(backup_db)
+		if self.global_state_db:
+			dbs.append(self.global_state_db)
+			backup_db = pathlib.Path(str(self.global_state_db) + '.backup')
+			if backup_db.exists():
+				dbs.append(backup_db)
 
 		return [db for db in dbs if db.exists()]
+
+	@staticmethod
+	def get_shared_state_db(variant):
+		shared_dirs = {
+			"Code": ".vscode-shared",
+			"VSCodium": ".vscodium-shared",
+		}
+		shared_dir = shared_dirs.get(variant)
+		if not shared_dir:
+			return None
+
+		return pathlib.Path.home() / shared_dir / "sharedStorage" / "state.vscdb"
 
 	def get_recents_global_state(self, global_state_db=None):
 		global_state_db = global_state_db or self.global_state_db
@@ -124,9 +141,26 @@ class Code:
 		logger.debug('loading storage.json')
 		with self.storage_json.open("r") as storage_file:
 			storage = json.load(storage_file)
-		entries = storage["openedPathsList"]["entries"]
+
+		if "openedPathsList" in storage:
+			entries = storage["openedPathsList"]["entries"]
+		else:
+			entries = self.get_profile_association_entries(storage)
+
 		logger.debug('found %d entries in storage.json', len(entries))
 		return self.parse_entry_paths(entries)
+
+	@staticmethod
+	def get_profile_association_entries(storage):
+		workspaces = storage.get("profileAssociations", {}).get("workspaces", {})
+		entries = []
+		for uri in workspaces:
+			if uri.endswith(".code-workspace"):
+				entries.append({"workspace": {"configPath": uri}})
+			else:
+				entries.append({"folderUri": uri})
+
+		return entries
 
 	@staticmethod
 	def parse_entry_paths(entries):

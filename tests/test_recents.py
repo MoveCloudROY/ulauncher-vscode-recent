@@ -106,6 +106,47 @@ def create_state_db(path, entries=None):
 
 
 class RecentsTest(unittest.TestCase):
+	def test_uses_shared_state_database_before_legacy_fallbacks(self):
+		module = load_main()
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = pathlib.Path(temp_dir)
+			shared_root = root / "sharedStorage"
+			shared_root.mkdir()
+			shared_db = shared_root / "state.vscdb"
+			current_db = root / "state.vscdb"
+			storage_json = root / "storage.json"
+
+			create_state_db(shared_db, [{"folderUri": "file:///tmp/shared-project"}])
+			create_state_db(current_db)
+			storage_json.write_text(
+				json.dumps(
+					{
+						"profileAssociations": {
+							"workspaces": {"file:///tmp/profile-project": "__default__profile__"}
+						}
+					}
+				)
+			)
+
+			code = module.Code.__new__(module.Code)
+			code.installed_path = pathlib.Path("/usr/bin/code")
+			code.config_path = root
+			code.shared_state_db = shared_db
+			code.global_state_db = current_db
+			code.storage_json = storage_json
+
+			self.assertEqual(
+				code.get_recents(),
+				[
+					{
+						"uri": "file:///tmp/shared-project",
+						"label": "shared-project",
+						"icon": "folder",
+						"option": "--folder-uri",
+					}
+				],
+			)
+
 	def test_uses_backup_state_database_when_current_database_has_no_recent_paths(self):
 		module = load_main()
 		with tempfile.TemporaryDirectory() as temp_dir:
@@ -133,6 +174,53 @@ class RecentsTest(unittest.TestCase):
 						"icon": "folder",
 						"option": "--folder-uri",
 					}
+				],
+			)
+
+	def test_uses_profile_associations_when_recent_paths_are_absent(self):
+		module = load_main()
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = pathlib.Path(temp_dir)
+			current_db = root / "state.vscdb"
+			backup_db = root / "state.vscdb.backup"
+			storage_json = root / "storage.json"
+
+			create_state_db(current_db)
+			create_state_db(backup_db)
+			storage_json.write_text(
+				json.dumps(
+					{
+						"profileAssociations": {
+							"workspaces": {
+								"file:///tmp/project": "__default__profile__",
+								"file:///tmp/demo.code-workspace": "__default__profile__",
+							}
+						}
+					}
+				)
+			)
+
+			code = module.Code.__new__(module.Code)
+			code.installed_path = pathlib.Path("/usr/bin/code")
+			code.config_path = root
+			code.global_state_db = current_db
+			code.storage_json = storage_json
+
+			self.assertEqual(
+				code.get_recents(),
+				[
+					{
+						"uri": "file:///tmp/project",
+						"label": "project",
+						"icon": "folder",
+						"option": "--folder-uri",
+					},
+					{
+						"uri": "file:///tmp/demo.code-workspace",
+						"label": "demo.code-workspace",
+						"icon": "workspace",
+						"option": "--file-uri",
+					},
 				],
 			)
 
