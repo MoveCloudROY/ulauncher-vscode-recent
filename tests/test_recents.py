@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -106,6 +107,54 @@ def create_state_db(path, entries=None):
 
 
 class RecentsTest(unittest.TestCase):
+	def test_detects_vscodium_binary_config_and_shared_state_paths(self):
+		module = load_main()
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = pathlib.Path(temp_dir)
+			bin_dir = root / "bin"
+			home_dir = root / "home"
+			config_dir = home_dir / ".config" / "VSCodium"
+			shared_dir = home_dir / ".vscodium-shared" / "sharedStorage"
+			bin_dir.mkdir()
+			config_dir.mkdir(parents=True)
+			shared_dir.mkdir(parents=True)
+			(bin_dir / "codium").touch()
+			(config_dir / "User" / "globalStorage").mkdir(parents=True)
+			(config_dir / "User" / "globalStorage" / "storage.json").write_text("{}")
+			(shared_dir / "state.vscdb").touch()
+
+			with mock.patch.object(module.pathlib.Path, "home", return_value=home_dir):
+				module.Code.path_dirs = (str(bin_dir),)
+				code = module.Code()
+
+			self.assertEqual(code.installed_path, bin_dir / "codium")
+			self.assertEqual(code.config_path, config_dir)
+			self.assertEqual(code.shared_state_db, shared_dir / "state.vscdb")
+
+	def test_detects_vscode_insiders_binary_config_and_shared_state_paths(self):
+		module = load_main()
+		with tempfile.TemporaryDirectory() as temp_dir:
+			root = pathlib.Path(temp_dir)
+			bin_dir = root / "bin"
+			home_dir = root / "home"
+			config_dir = home_dir / ".config" / "Code - Insiders"
+			shared_dir = home_dir / ".vscode-insiders-shared" / "sharedStorage"
+			bin_dir.mkdir()
+			config_dir.mkdir(parents=True)
+			shared_dir.mkdir(parents=True)
+			(bin_dir / "code-insiders").touch()
+			(config_dir / "User" / "globalStorage").mkdir(parents=True)
+			(config_dir / "User" / "globalStorage" / "storage.json").write_text("{}")
+			(shared_dir / "state.vscdb").touch()
+
+			with mock.patch.object(module.pathlib.Path, "home", return_value=home_dir):
+				module.Code.path_dirs = (str(bin_dir),)
+				code = module.Code()
+
+			self.assertEqual(code.installed_path, bin_dir / "code-insiders")
+			self.assertEqual(code.config_path, config_dir)
+			self.assertEqual(code.shared_state_db, shared_dir / "state.vscdb")
+
 	def test_uses_shared_state_database_before_legacy_fallbacks(self):
 		module = load_main()
 		with tempfile.TemporaryDirectory() as temp_dir:

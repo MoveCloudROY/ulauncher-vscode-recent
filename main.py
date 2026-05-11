@@ -34,7 +34,26 @@ class Utils:
 
 class Code:
 	path_dirs = ("/usr/bin", "/bin", "/snap/bin")
-	variants = ("Code", "VSCodium")
+	variants = (
+		{
+			"name": "Code",
+			"binary": "code",
+			"config": "Code",
+			"shared_state_dir": ".vscode-shared",
+		},
+		{
+			"name": "VSCodium",
+			"binary": "codium",
+			"config": "VSCodium",
+			"shared_state_dir": ".vscodium-shared",
+		},
+		{
+			"name": "Code - Insiders",
+			"binary": "code-insiders",
+			"config": "Code - Insiders",
+			"shared_state_dir": ".vscode-insiders-shared",
+		},
+	)
 
 	def __init__(self):
 		self.installed_path = None
@@ -46,8 +65,8 @@ class Code:
 		logger.debug('locating installation and config directories')
 		for path in (pathlib.Path(path_dir) for path_dir in Code.path_dirs):
 			for variant in Code.variants:
-				installed_path = path / variant.lower()
-				config_path = pathlib.Path.home() / ".config" / variant
+				installed_path = path / variant["binary"]
+				config_path = pathlib.Path.home() / ".config" / variant["config"]
 				logger.debug('evaluating installation dir %s and config dir %s',
 				             installed_path, config_path)
 				if installed_path.exists() and config_path.exists() and (config_path / "User" / "globalStorage" / "storage.json").exists():
@@ -102,11 +121,7 @@ class Code:
 
 	@staticmethod
 	def get_shared_state_db(variant):
-		shared_dirs = {
-			"Code": ".vscode-shared",
-			"VSCodium": ".vscodium-shared",
-		}
-		shared_dir = shared_dirs.get(variant)
+		shared_dir = variant.get("shared_state_dir")
 		if not shared_dir:
 			return None
 
@@ -243,7 +258,7 @@ class CodeExtension(Extension):
 		if query_raw.strip() != "":
 			items.append(
 				ExtensionSmallResultItem(
-					icon=Utils.get_path(f"images/icon.svg"),
+					icon=Utils.get_path("images/icon.svg"),
 					name=query_raw,
 					on_enter=ExtensionCustomAction({'option': '', 'uri':query_raw}),
 				)
@@ -267,8 +282,8 @@ class KeywordQueryEventListener(EventListener):
 			items.append(
 				ExtensionResultItem(
 					icon=Utils.get_path("images/icon.svg"),
-					name="No VS Code?",
-					description="Can't find the VS Code's `code` command in your system :(",
+					name="No VS Code family app?",
+					description="Can't find a supported VS Code, VSCodium, or VS Code Insiders command in your system :(",
 					highlightable=False,
 					on_enter=HideWindowAction(),
 				)
