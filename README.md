@@ -1,8 +1,8 @@
 # ulauncher-vscode-recent
 
-> 💻 Open recent VS Code folders and files using Ulauncher.
+> 💻 Open recent VS Code family folders and files using Ulauncher.
 
-Quickly open recently-opened VS Code project directories and files.
+Quickly open recently-opened VS Code, VSCodium, and VS Code Insiders project directories and files.
 
 ## Install
 
